@@ -16,11 +16,11 @@ RUN useradd -r -s /bin/false -u 1000 ocruser
 WORKDIR /app
 
 # Copiar requirements
-COPY requirements_optimized.txt .
+COPY requirements.txt .
 
 # Instalar dependências Python
 RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements_optimized.txt
+    && pip install --no-cache-dir -r requirements.txt
 
 # Copiar código da aplicação
 COPY ocr_service.py .
