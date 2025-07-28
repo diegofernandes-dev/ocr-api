@@ -25,6 +25,10 @@ from PIL import Image, ImageEnhance, ImageFilter, ImageOps
 import cv2
 import numpy as np
 
+# PDF processing
+from pdf2image import convert_from_bytes
+import PyPDF2
+
 # Web framework
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
@@ -45,7 +49,7 @@ logger = logging.getLogger(__name__)
 MAX_WORKERS = min(8, (os.cpu_count() or 1))  # Reduzido para evitar overhead
 CACHE_TTL = 3600
 MAX_FILE_SIZE = 16 * 1024 * 1024
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gmp', 'bmp', 'tiff'}
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gmp', 'bmp', 'tiff', 'pdf'}
 
 # Cache em memória para resultados
 result_cache = TTLCache(maxsize=1000, ttl=CACHE_TTL)
@@ -97,6 +101,103 @@ def bytes_to_numpy(image_bytes: bytes) -> np.ndarray:
     nparr = np.frombuffer(image_bytes, np.uint8)
     image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     return image
+
+def is_pdf_file(file_bytes: bytes) -> bool:
+    """Verifica se o arquivo é um PDF baseado no header"""
+    return file_bytes.startswith(b'%PDF')
+
+def extract_text_from_pdf_text(pdf_bytes: bytes) -> str:
+    """Extrai texto de PDFs que já contêm texto (não escaneados)"""
+    try:
+        pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+        text = ""
+        for page in pdf_reader.pages:
+            page_text = page.extract_text()
+            if page_text.strip():
+                text += page_text + "\n"
+        return text.strip()
+    except Exception as e:
+        logger.warning(f"Erro ao extrair texto do PDF: {e}")
+        return ""
+
+def is_pdf_scanned(pdf_bytes: bytes) -> bool:
+    """Verifica se o PDF é escaneado (sem texto extraível)"""
+    text = extract_text_from_pdf_text(pdf_bytes)
+    return len(text.strip()) < 50  # Se tem menos de 50 caracteres, provavelmente é escaneado
+
+def pdf_to_images(pdf_bytes: bytes) -> List[np.ndarray]:
+    """Converte PDF escaneado para lista de imagens"""
+    try:
+        # Converter PDF para imagens
+        images = convert_from_bytes(
+            pdf_bytes,
+            dpi=300,  # Alta resolução para melhor OCR
+            fmt='PNG',
+            thread_count=4  # Processamento paralelo
+        )
+        
+        # Converter PIL images para numpy arrays
+        numpy_images = []
+        for img in images:
+            # Converter PIL para numpy
+            img_array = np.array(img)
+            # Converter RGB para BGR (OpenCV format)
+            if len(img_array.shape) == 3:
+                img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+            numpy_images.append(img_array)
+        
+        return numpy_images
+    except Exception as e:
+        logger.error(f"Erro ao converter PDF para imagens: {e}")
+        raise HTTPException(status_code=400, detail=f"Erro ao processar PDF: {str(e)}")
+
+def process_pdf_ultra_fast(pdf_bytes: bytes) -> OCRResult:
+    """Processa PDF escaneado usando OCR ultra-otimizado"""
+    start_time = time.time()
+    
+    # Verificar se é PDF com texto ou escaneado
+    if not is_pdf_scanned(pdf_bytes):
+        # PDF com texto - extrair diretamente
+        text = extract_text_from_pdf_text(pdf_bytes)
+        processing_time = time.time() - start_time
+        return OCRResult(
+            text=text,
+            confidence=100.0,  # Texto extraído diretamente
+            processing_time=processing_time,
+            strategy_used="pdf_text_extraction",
+            image_hash=get_image_hash(pdf_bytes),
+            preprocessing_method="direct_text"
+        )
+    
+    # PDF escaneado - converter para imagens e fazer OCR
+    images = pdf_to_images(pdf_bytes)
+    
+    all_text = []
+    total_confidence = 0.0
+    strategies_used = []
+    
+    for i, image in enumerate(images):
+        try:
+            # Processar cada página com OCR ultra-otimizado
+            text, confidence, strategy, preprocess = run_ocr_ultra_fast(image)
+            all_text.append(f"--- Página {i+1} ---\n{text}")
+            total_confidence += confidence
+            strategies_used.append(strategy)
+        except Exception as e:
+            logger.error(f"Erro ao processar página {i+1}: {e}")
+            all_text.append(f"--- Página {i+1} ---\n[Erro no processamento]")
+    
+    processing_time = time.time() - start_time
+    avg_confidence = total_confidence / len(images) if images else 0.0
+    
+    return OCRResult(
+        text="\n\n".join(all_text),
+        confidence=avg_confidence,
+        processing_time=processing_time,
+        strategy_used="; ".join(set(strategies_used)),
+        image_hash=get_image_hash(pdf_bytes),
+        preprocessing_method="pdf_to_images"
+    )
 
 def numpy_to_pil(numpy_image: np.ndarray) -> Image.Image:
     """Converte numpy array para PIL Image"""
@@ -247,51 +348,61 @@ def intelligent_post_processing_ultra(text: str) -> str:
     
     return text
 
-async def process_ocr_ultra_fast(image_bytes: bytes) -> OCRResult:
+async def process_ocr_ultra_fast(file_bytes: bytes, file_extension: str = None) -> OCRResult:
     """
     Processamento completo ULTRA OTIMIZADO 100% em memória
+    Suporta imagens e PDFs
     """
     start_time = time.time()
     
     # Verificar cache primeiro
-    image_hash = get_image_hash(image_bytes)
-    if image_hash in result_cache:
+    file_hash = get_image_hash(file_bytes)
+    if file_hash in result_cache:
         logger.info("Resultado encontrado no cache")
-        return result_cache[image_hash]
+        return result_cache[file_hash]
     
     try:
-        # Converter bytes para numpy
-        image = bytes_to_numpy(image_bytes)
-        
-        # OCR ULTRA RÁPIDO
-        text, confidence, strategy, preprocessing = await asyncio.get_event_loop().run_in_executor(
-            ocr_executor,
-            run_ocr_ultra_fast,
-            image
-        )
-        
-        # Pós-processamento ultra otimizado
-        final_text = intelligent_post_processing_ultra(text)
-        
-        processing_time = time.time() - start_time
-        
-        # Criar resultado
-        result = OCRResult(
-            text=final_text,
-            confidence=confidence,
-            processing_time=processing_time,
-            strategy_used=strategy,
-            image_hash=image_hash,
-            preprocessing_method=preprocessing
-        )
+        # Verificar se é PDF
+        if is_pdf_file(file_bytes):
+            logger.info("Processando PDF...")
+            result = await asyncio.get_event_loop().run_in_executor(
+                ocr_executor,
+                process_pdf_ultra_fast,
+                file_bytes
+            )
+        else:
+            # Processar como imagem
+            logger.info("Processando imagem...")
+            image = bytes_to_numpy(file_bytes)
+            
+            # OCR ULTRA RÁPIDO
+            text, confidence, strategy, preprocessing = await asyncio.get_event_loop().run_in_executor(
+                ocr_executor,
+                run_ocr_ultra_fast,
+                image
+            )
+            
+            # Pós-processamento ultra otimizado
+            final_text = intelligent_post_processing_ultra(text)
+            
+            processing_time = time.time() - start_time
+            
+            result = OCRResult(
+                text=final_text,
+                confidence=confidence,
+                processing_time=processing_time,
+                strategy_used=strategy,
+                image_hash=file_hash,
+                preprocessing_method=preprocessing
+            )
         
         # Armazenar no cache
-        result_cache[image_hash] = result
+        result_cache[file_hash] = result
         
         return result
         
     except Exception as e:
-        logger.error(f"Erro no processamento OCR: {e}")
+        logger.error(f"Erro no processamento: {e}")
         raise
 
 @app.get("/health")
@@ -372,11 +483,22 @@ async def root():
     return {
         "service": "OCR Service - Ultra Fast",
         "version": "4.0.0",
-        "description": "Processamento 100% em memória + ULTRA OTIMIZADO - Máxima velocidade",
+        "description": "Processamento 100% em memória + ULTRA OTIMIZADO - Suporte a imagens e PDFs",
+        "supported_formats": {
+            "images": ["PNG", "JPG", "JPEG", "BMP", "TIFF"],
+            "documents": ["PDF"]
+        },
+        "features": [
+            "OCR de imagens com alta precisão",
+            "OCR de PDFs escaneados",
+            "Extração de texto de PDFs com texto",
+            "Processamento paralelo otimizado",
+            "Cache inteligente em memória"
+        ],
         "endpoints": {
             "GET /": "Informações do serviço",
             "GET /health": "Health check com métricas",
-            "POST /ocr": "Processamento de OCR"
+            "POST /ocr": "Processamento de OCR (imagens e PDFs)"
         }
     }
 
@@ -385,8 +507,9 @@ if __name__ == "__main__":
     print("📝 Endpoints disponíveis:")
     print("   GET  /       - Informações do serviço")
     print("   GET  /health - Health check com métricas")
-    print("   POST /ocr    - Processamento de OCR")
+    print("   POST /ocr    - Processamento de OCR (imagens e PDFs)")
     print("💾 Processamento 100% em memória + ULTRA OTIMIZADO!")
+    print("📄 Suporte a imagens e PDFs escaneados!")
     print("⚡ MÁXIMA VELOCIDADE - 2 métodos × 2 configs = 4 combinações paralelas")
     print("🌐 Servidor rodando em http://0.0.0.0:8080")
     
