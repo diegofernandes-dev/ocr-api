@@ -1,71 +1,105 @@
-# OCR Service - ULTRA FAST
+# OCR API Service
 
-Serviço de OCR (Optical Character Recognition) **ULTRA OTIMIZADO** com processamento 100% em memória e máxima performance.
+[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://hub.docker.com/r/diegoistta/ocr-api)
+[![Python](https://img.shields.io/badge/Python-3.11+-green.svg)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-red.svg)](https://fastapi.tiangolo.com)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 🚀 Características
+Um serviço de **OCR (Optical Character Recognition)** ultra-otimizado construído com FastAPI, oferecendo processamento de imagens em tempo real com alta precisão e performance excepcional.
 
-- **⚡ ULTRA RÁPIDO**: 0.47 segundos para processamento completo
-- **💾 100% em Memória**: Zero dados estáticos no container
+## 🚀 Características Principais
+
+- **⚡ Ultra Performance**: Processamento em 0.47 segundos
+- **🎯 Alta Precisão**: 96.86% de taxa de acerto
 - **🔄 Processamento Paralelo**: 4 combinações simultâneas
-- **🎯 Alta Confiança**: 96.86% de precisão
-- **📊 Health Checks**: Monitoramento em tempo real
-- **💡 Cache Inteligente**: Resultados em cache para reutilização
+- **💾 Cache Inteligente**: Resultados em memória com TTL
+- **📊 Health Monitoring**: Métricas em tempo real
+- **🐳 Docker Ready**: Containerização completa
+- **🔒 Segurança**: Usuário não-root e validação de entrada
 
-## 🏗️ Arquitetura
+## 📋 Índice
 
-### Otimizações Implementadas:
-- **FastAPI**: Framework assíncrono de alta performance
-- **ThreadPoolExecutor**: Processamento paralelo otimizado
-- **Cache TTL**: Cache em memória com expiração
-- **Pré-processamento Inteligente**: Apenas 2 métodos mais eficazes
-- **Configurações Otimizadas**: Apenas 2 configurações Tesseract mais eficazes
-- **Garbage Collection**: Limpeza automática de memória
+- [Instalação](#-instalação)
+- [Uso Rápido](#-uso-rápido)
+- [API Reference](#-api-reference)
+- [Configuração](#-configuração)
+- [Performance](#-performance)
+- [Desenvolvimento](#-desenvolvimento)
+- [Deploy](#-deploy)
+- [Contribuição](#-contribuição)
 
-### Performance:
-- **Combinações**: 2 métodos × 2 configs = 4 combinações paralelas
-- **Workers**: 8 threads otimizadas
-- **Timeout**: 5 segundos por OCR
-- **Cache**: 1000 resultados com TTL de 1 hora
+## 🛠️ Instalação
 
-## 📦 Instalação
-
-### Pré-requisitos
-- Docker
-- Python 3.11+ (para desenvolvimento local)
-
-### Build e Execução
+### Usando Docker (Recomendado)
 
 ```bash
-# Build da imagem
-docker build -t ocr-service .
+# Pull da imagem oficial
+docker pull diegoistta/ocr-api:latest
 
-# Executar container
-docker run -d -p 8080:8080 --name ocr-service ocr-service
+# Executar o container
+docker run -d -p 8080:8080 --name ocr-api diegoistta/ocr-api:latest
+```
+
+### Build Local
+
+```bash
+# Clone o repositório
+git clone https://github.com/diegofernandes-dev/ocr-api.git
+cd ocr-api
+
+# Build da imagem
+docker build -t ocr-api .
+
+# Executar
+docker run -d -p 8080:8080 --name ocr-api ocr-api
 ```
 
 ### Desenvolvimento Local
 
 ```bash
 # Instalar dependências
-pip install -r requirements_optimized.txt
+pip install -r requirements.txt
 
-# Executar serviço
+# Executar o serviço
 python ocr_service.py
 ```
 
-## 🔧 Uso
+## 🚀 Uso Rápido
 
 ### Health Check
 ```bash
 curl http://localhost:8080/health
 ```
 
-### Processamento OCR
+### Processar Imagem
 ```bash
-curl -X POST -F "file=@imagem.png" http://localhost:8080/ocr
+curl -X POST -F "file=@sua_imagem.png" http://localhost:8080/ocr
 ```
 
-### Exemplo de Resposta
+### Exemplo com Python
+```python
+import requests
+
+# Upload e processar imagem
+with open('documento.png', 'rb') as f:
+    files = {'file': f}
+    response = requests.post('http://localhost:8080/ocr', files=files)
+    
+result = response.json()
+print(f"Texto: {result['text']}")
+print(f"Confiança: {result['confidence']}%")
+```
+
+## 📚 API Reference
+
+### POST `/ocr`
+
+Processa uma imagem e extrai texto usando OCR.
+
+**Parâmetros:**
+- `file` (multipart/form-data): Arquivo de imagem (PNG, JPG, JPEG)
+
+**Resposta de Sucesso (200):**
 ```json
 {
   "text": "Texto extraído da imagem...",
@@ -77,14 +111,24 @@ curl -X POST -F "file=@imagem.png" http://localhost:8080/ocr
 }
 ```
 
-## 📊 Métricas
+**Resposta de Erro (400/500):**
+```json
+{
+  "error": "Descrição do erro",
+  "status": "error"
+}
+```
 
-### Health Check Response
+### GET `/health`
+
+Retorna o status de saúde do serviço e métricas do sistema.
+
+**Resposta (200):**
 ```json
 {
   "status": "healthy",
-  "service": "ocr-service-ultra-fast",
-  "version": "4.0.0",
+  "service": "ocr-api",
+  "version": "1.0.0",
   "metrics": {
     "cpu_percent": 0.1,
     "memory_percent": 10.7,
@@ -96,54 +140,174 @@ curl -X POST -F "file=@imagem.png" http://localhost:8080/ocr
 }
 ```
 
-## 🎯 Configurações Tesseract
+## ⚙️ Configuração
 
-### Idiomas Suportados
+### Variáveis de Ambiente
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `MAX_WORKERS` | 8 | Número máximo de workers |
+| `CACHE_TTL` | 3600 | TTL do cache em segundos |
+| `MAX_FILE_SIZE` | 16777216 | Tamanho máximo do arquivo (16MB) |
+
+### Configurações Tesseract
+
+**Idiomas Suportados:**
 - Português + Inglês (`por+eng`)
 - Inglês puro (`eng`)
 
-### Configurações Otimizadas
+**Configurações Otimizadas:**
 - `--oem 3 --psm 3`: Melhor para documentos
-- `--oem 3 --psm 3`: Inglês puro
+- `--oem 3 --psm 6`: Para blocos de texto uniforme
 
-### Métodos de Pré-processamento
+**Métodos de Pré-processamento:**
 - **Original**: Imagem sem modificação
 - **CLAHE**: Contrast Limited Adaptive Histogram Equalization
 
-## 🔒 Segurança
+## 📊 Performance
 
-- **Usuário não-root**: Container roda como usuário `ocruser`
-- **Sem dados estáticos**: Zero persistência de arquivos
-- **Validação de entrada**: Verificação de tipos de arquivo
-- **Limite de tamanho**: Máximo 16MB por arquivo
+### Métricas de Performance
 
-## 📈 Performance
+| Métrica | Valor |
+|---------|-------|
+| Tempo de Processamento | 0.47s |
+| Taxa de Precisão | 96.86% |
+| Combinações Paralelas | 4 |
+| Workers | 8 |
+| Cache TTL | 1 hora |
 
 ### Comparação de Versões
-| Versão | Tempo | Confiança | Combinações | Status |
-|--------|-------|-----------|-------------|---------|
-| Original | ~20s | ~95% | 8×6 = 48 | ❌ Lento |
-| **ULTRA-FAST** | **0.47s** | **96.86%** | **2×2 = 4** | ✅ **PERFEITO!** |
 
-### Melhorias Alcançadas
-- **42x mais rápido**: De 20s para 0.47s
-- **Mantém alta confiança**: 96.86%
-- **Zero dados estáticos**: 100% em memória
-- **Processamento paralelo**: 4 combinações simultâneas
+| Versão | Tempo | Precisão | Combinações | Status |
+|--------|-------|----------|-------------|---------|
+| Original | ~20s | ~95% | 8×6 = 48 | ❌ |
+| **Otimizada** | **0.47s** | **96.86%** | **2×2 = 4** | ✅ |
 
-## 🛠️ Tecnologias
+## 🏗️ Arquitetura
 
-- **Python 3.11**
-- **FastAPI**
-- **Tesseract OCR**
-- **OpenCV**
-- **Pillow**
-- **Docker**
+### Componentes Principais
 
-## 📝 Licença
+- **FastAPI**: Framework web assíncrono
+- **Tesseract OCR**: Engine de reconhecimento
+- **OpenCV**: Processamento de imagem
+- **ThreadPoolExecutor**: Processamento paralelo
+- **Cache LRU**: Cache em memória
 
-Este projeto está sob a licença MIT.
+### Fluxo de Processamento
+
+1. **Upload**: Recebe arquivo de imagem
+2. **Validação**: Verifica tipo e tamanho
+3. **Pré-processamento**: Aplica técnicas de otimização
+4. **OCR Paralelo**: Executa 4 combinações simultâneas
+5. **Cache**: Armazena resultado para reutilização
+6. **Resposta**: Retorna texto extraído com métricas
+
+## 🐳 Deploy
+
+### Docker Compose
+
+```yaml
+version: '3.8'
+services:
+  ocr-api:
+    image: diegoistta/ocr-api:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - MAX_WORKERS=8
+      - CACHE_TTL=3600
+    restart: unless-stopped
+```
+
+### Kubernetes
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ocr-api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ocr-api
+  template:
+    metadata:
+      labels:
+        app: ocr-api
+    spec:
+      containers:
+      - name: ocr-api
+        image: diegoistta/ocr-api:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MAX_WORKERS
+          value: "8"
+```
+
+## 🧪 Desenvolvimento
+
+### Setup do Ambiente
+
+```bash
+# Clone o repositório
+git clone https://github.com/diegofernandes-dev/ocr-api.git
+cd ocr-api
+
+# Crie um ambiente virtual
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# ou
+venv\Scripts\activate     # Windows
+
+# Instale as dependências
+pip install -r requirements.txt
+
+# Execute os testes
+python -m pytest tests/
+
+# Execute o serviço
+python ocr_service.py
+```
+
+### Estrutura do Projeto
+
+```
+ocr-api/
+├── ocr_service.py      # Serviço principal
+├── requirements.txt    # Dependências Python
+├── Dockerfile         # Configuração Docker
+├── README.md          # Documentação
+├── .gitignore         # Arquivos ignorados
+└── tests/             # Testes unitários
+    └── test_ocr.py
+```
+
+## 🤝 Contribuição
+
+1. Fork o projeto
+2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
+3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
+4. Push para a branch (`git push origin feature/AmazingFeature`)
+5. Abra um Pull Request
+
+## 📄 Licença
+
+Este projeto está licenciado sob a Licença MIT - veja o arquivo [LICENSE](LICENSE) para detalhes.
+
+## 👨‍💻 Autor
+
+**Diego Fernandes**
+- GitHub: [@diegofernandes-dev](https://github.com/diegofernandes-dev)
+- Docker Hub: [diegoistta](https://hub.docker.com/u/diegoistta)
+
+## 🙏 Agradecimentos
+
+- [Tesseract OCR](https://github.com/tesseract-ocr/tesseract)
+- [FastAPI](https://fastapi.tiangolo.com)
+- [OpenCV](https://opencv.org)
 
 ---
 
-**⚡ Versão ULTRA-FAST - Pronta para Produção!**
+⭐ Se este projeto te ajudou, considere dar uma estrela no repositório!
