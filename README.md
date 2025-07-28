@@ -5,12 +5,14 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-red.svg)](https://fastapi.tiangolo.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Um serviço de **OCR (Optical Character Recognition)** ultra-otimizado construído com FastAPI, oferecendo processamento de imagens em tempo real com alta precisão e performance excepcional.
+Um serviço de **OCR (Optical Character Recognition)** ultra-otimizado construído com FastAPI, oferecendo processamento de imagens e PDFs em tempo real com alta precisão e performance excepcional.
 
 ## 🚀 Características Principais
 
 - **⚡ Ultra Performance**: Processamento em 0.47 segundos
 - **🎯 Alta Precisão**: 96.86% de taxa de acerto
+- **📄 PDF Support**: OCR de PDFs escaneados e extração de texto
+- **🖼️ Image Processing**: Suporte a múltiplos formatos de imagem
 - **🔄 Processamento Paralelo**: 4 combinações simultâneas
 - **💾 Cache Inteligente**: Resultados em memória com TTL
 - **📊 Health Monitoring**: Métricas em tempo real
@@ -76,6 +78,11 @@ curl http://localhost:8080/health
 curl -X POST -F "file=@sua_imagem.png" http://localhost:8080/ocr
 ```
 
+### Processar PDF
+```bash
+curl -X POST -F "file=@documento.pdf" http://localhost:8080/ocr
+```
+
 ### Exemplo com Python
 ```python
 import requests
@@ -88,16 +95,25 @@ with open('documento.png', 'rb') as f:
 result = response.json()
 print(f"Texto: {result['text']}")
 print(f"Confiança: {result['confidence']}%")
+
+# Upload e processar PDF
+with open('documento.pdf', 'rb') as f:
+    files = {'file': f}
+    response = requests.post('http://localhost:8080/ocr', files=files)
+    
+result = response.json()
+print(f"Texto: {result['text']}")
+print(f"Confiança: {result['confidence']}%")
 ```
 
 ## 📚 API Reference
 
 ### POST `/ocr`
 
-Processa uma imagem e extrai texto usando OCR.
+Processa uma imagem ou PDF e extrai texto usando OCR.
 
 **Parâmetros:**
-- `file` (multipart/form-data): Arquivo de imagem (PNG, JPG, JPEG)
+- `file` (multipart/form-data): Arquivo de imagem (PNG, JPG, JPEG, BMP, TIFF) ou PDF
 
 **Resposta de Sucesso (200):**
 ```json
@@ -150,6 +166,25 @@ Retorna o status de saúde do serviço e métricas do sistema.
 | `CACHE_TTL` | 3600 | TTL do cache em segundos |
 | `MAX_FILE_SIZE` | 16777216 | Tamanho máximo do arquivo (16MB) |
 
+### Formatos Suportados
+
+**Imagens:**
+- PNG, JPG, JPEG, BMP, TIFF
+
+**Documentos:**
+- PDF (escaneados e com texto)
+
+### Processamento de PDFs
+
+**PDFs com Texto:**
+- Extração direta de texto (100% de confiança)
+- Processamento ultra-rápido
+
+**PDFs Escaneados:**
+- Conversão para imagens de alta resolução (300 DPI)
+- OCR página por página
+- Processamento paralelo otimizado
+
 ### Configurações Tesseract
 
 **Idiomas Suportados:**
@@ -190,15 +225,28 @@ Retorna o status de saúde do serviço e métricas do sistema.
 - **FastAPI**: Framework web assíncrono
 - **Tesseract OCR**: Engine de reconhecimento
 - **OpenCV**: Processamento de imagem
+- **PyPDF2**: Processamento de PDFs
+- **pdf2image**: Conversão PDF para imagem
 - **ThreadPoolExecutor**: Processamento paralelo
 - **Cache LRU**: Cache em memória
 
 ### Fluxo de Processamento
 
+**Para Imagens:**
 1. **Upload**: Recebe arquivo de imagem
 2. **Validação**: Verifica tipo e tamanho
 3. **Pré-processamento**: Aplica técnicas de otimização
 4. **OCR Paralelo**: Executa 4 combinações simultâneas
+5. **Cache**: Armazena resultado para reutilização
+6. **Resposta**: Retorna texto extraído com métricas
+
+**Para PDFs:**
+1. **Upload**: Recebe arquivo PDF
+2. **Validação**: Verifica tipo e tamanho
+3. **Detecção**: Identifica se é PDF com texto ou escaneado
+4. **Processamento**:
+   - **PDF com texto**: Extração direta
+   - **PDF escaneado**: Conversão para imagens + OCR
 5. **Cache**: Armazena resultado para reutilização
 6. **Resposta**: Retorna texto extraído com métricas
 
